@@ -76,6 +76,48 @@ def check_video_resolution(filepath):
         return False, f"Error checking resolution: {str(e)}"
 
 
+def restart_video_player():
+    """Restart the video player service to reload the playlist."""
+    try:
+        result = subprocess.run(
+            ['sudo', 'systemctl', 'restart', 'video-player-x11.service'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            logger.info("Video player service restarted successfully")
+            return True
+        else:
+            logger.error(f"Failed to restart video player: {result.stderr}")
+            return False
+    except Exception as e:
+        logger.error(f"Error restarting video player: {e}")
+        return False
+
+
+def restart_system():
+    """Restart the Raspberry Pi."""
+    try:
+        logger.info("System restart initiated")
+        subprocess.Popen(['sudo', 'reboot'])
+        return True
+    except Exception as e:
+        logger.error(f"Error restarting system: {e}")
+        return False
+
+
+def shutdown_system():
+    """Shutdown the Raspberry Pi."""
+    try:
+        logger.info("System shutdown initiated")
+        subprocess.Popen(['sudo', 'shutdown', '-h', 'now'])
+        return True
+    except Exception as e:
+        logger.error(f"Error shutting down system: {e}")
+        return False
+
+
 @app.route('/')
 def index():
     """Serve the main upload page."""
@@ -140,6 +182,9 @@ def upload_file():
         
         logger.info(f"Uploaded video: {filename} ({filepath.stat().st_size / 1024 / 1024:.2f} MB) - {message}")
         
+        # Restart video player to include new video in playlist
+        restart_video_player()
+        
         return jsonify({
             'success': True,
             'filename': filename,
@@ -188,10 +233,35 @@ def delete_video(filename):
         filepath.unlink()
         logger.info(f"Deleted video: {filename}")
         
+        # Restart video player to update playlist
+        restart_video_player()
+        
         return jsonify({'success': True, 'message': f'Deleted {filename}'})
         
     except Exception as e:
         logger.error(f"Delete error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/system/restart', methods=['POST'])
+def system_restart():
+    """Restart the Raspberry Pi."""
+    try:
+        restart_system()
+        return jsonify({'success': True, 'message': 'System restart initiated'})
+    except Exception as e:
+        logger.error(f"Restart error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/system/shutdown', methods=['POST'])
+def system_shutdown():
+    """Shutdown the Raspberry Pi."""
+    try:
+        shutdown_system()
+        return jsonify({'success': True, 'message': 'System shutdown initiated'})
+    except Exception as e:
+        logger.error(f"Shutdown error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

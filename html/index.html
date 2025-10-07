@@ -15,7 +15,6 @@
 
         <div class="upload-area">
             <div class="drop-zone" id="drop-zone">
-                <div class="drop-zone-icon">📹</div>
                 <h2>Drop videos here</h2>
                 <p>or</p>
                 <button class="browse-btn" onclick="document.getElementById('file-input').click()">
@@ -43,7 +42,21 @@
                 <div class="loading">Loading videos...</div>
             </div>
         </div>
+
+        <div class="system-controls">
+            <h2>System Controls</h2>
+            <div class="control-buttons">
+                <button class="control-btn restart-btn" onclick="restartSystem()">
+                    Reboot
+                </button>
+                <button class="control-btn shutdown-btn" onclick="shutdownSystem()">
+                    Shutdown
+                </button>
+            </div>
+        </div>
+        <div class="credits"><a href="https://www.pascalp.ch"><img src="camcat_BW.svg" width="150px" alt="miauwz logo"></a>VIDEO UPLOAD 3000 made by Pascal Pendl / miawz.visualz</div>
     </div>
+   
 
     <script>
         const dropZone = document.getElementById('drop-zone');
@@ -148,10 +161,10 @@
                 xhr.addEventListener('load', () => {
                     if (xhr.status === 200) {
                         const response = JSON.parse(xhr.responseText);
-                        showMessage(`✓ Successfully uploaded: ${response.filename}`, 'success');
+                        showMessage(`Successfully uploaded: ${response.filename}`, 'success');
                     } else {
                         const error = JSON.parse(xhr.responseText);
-                        showMessage(`✗ Error: ${error.error}`, 'error');
+                        showMessage(`Error: ${error.error}`, 'error');
                     }
                     setTimeout(() => {
                         uploadProgress.style.display = 'none';
@@ -237,6 +250,56 @@
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        async function restartSystem() {
+            if (!confirm('Are you sure you want to RESTART the Raspberry Pi?\n\nThis will reboot the system immediately.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/system/restart', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('🔄 System restarting...', 'success');
+                    setTimeout(() => {
+                        showMessage('System will be back online in ~30 seconds', 'success');
+                    }, 2000);
+                } else {
+                    showMessage(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showMessage('System restart initiated', 'success');
+            }
+        }
+
+        async function shutdownSystem() {
+            if (!confirm('Are you sure you want to SHUTDOWN the Raspberry Pi?\n\nThis will turn off the system completely.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/system/shutdown', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('⏻ System shutting down...', 'success');
+                    setTimeout(() => {
+                        showMessage('System powered off. Unplug to fully shutdown.', 'success');
+                    }, 2000);
+                } else {
+                    showMessage(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showMessage('System shutdown initiated', 'success');
+            }
         }
 
         // Load videos on page load
