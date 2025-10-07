@@ -1,0 +1,35 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Video files
+videos/
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv
+*.flv
+*.webm
+*.m4v
+*.mpg
+*.mpeg
+
+# System files
+.bash_history
+.bash_logout
+.bashrc
+.profile
+.sudo_as_admin_successful
+.cache/
+.config/
+.codeium/
+.windsurf-server/
+
+# Temporary files
+*.tmp
+*.log
+/tmp/
