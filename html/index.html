@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Upload - Raspberry Pi</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>VIDEO UPLOAD 3000</h1>
+            <p>Drag and drop videos to upload to the fucking waaaaave</p>
+        </div>
+
+        <div class="upload-area">
+            <div class="drop-zone" id="drop-zone">
+                <div class="drop-zone-icon">📹</div>
+                <h2>Drop videos here</h2>
+                <p>or</p>
+                <button class="browse-btn" onclick="document.getElementById('file-input').click()">
+                    Browse Files
+                </button>
+                <input type="file" id="file-input" accept="video/*" multiple>
+                <p style="margin-top: 20px; font-size: 0.9rem; color: #999;">
+                    Supported formats: MP4, AVI, MKV, MOV, WMV, FLV, WebM, M4V, MPG, MPEG
+                </p>
+                <p style="margin-top: 20px; font-size: 0.9rem; color: #999;">
+                    Supported resolution: 3072x64 pixel
+                </p>
+            </div>
+
+            <div class="upload-progress" id="upload-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="video-list">
+            <h2>Videos on Raspberry Pi</h2>
+            <div id="video-list-content">
+                <div class="loading">Loading videos...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const uploadProgress = document.getElementById('upload-progress');
+        const progressFill = document.getElementById('progress-fill');
+        const videoListContent = document.getElementById('video-list-content');
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Highlight drop zone when dragging over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.add('drag-over');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.remove('drag-over');
+            }, false);
+        });
+
+        // Handle dropped files
+        dropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            handleFiles(files);
+        }, false);
+
+        // Handle file input change
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            handleFiles(files);
+        });
+
+        async function handleFiles(files) {
+            for (let file of files) {
+                // Validate resolution before uploading
+                const isValid = await validateVideoResolution(file);
+                if (isValid) {
+                    await uploadFile(file);
+                }
+            }
+            loadVideos();
+        }
+
+        async function validateVideoResolution(file) {
+            return new Promise((resolve) => {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                
+                video.onloadedmetadata = function() {
+                    window.URL.revokeObjectURL(video.src);
+                    const width = video.videoWidth;
+                    const height = video.videoHeight;
+                    
+                    if (width === 3072 && height === 64) {
+                        resolve(true);
+                    } else {
+                        showMessage(`✗ Invalid resolution for "${file.name}": ${width}x${height}. Required: 3072x64 pixels.`, 'error');
+                        resolve(false);
+                    }
+                };
+                
+                video.onerror = function() {
+                    showMessage(`✗ Error reading video file: ${file.name}`, 'error');
+                    resolve(false);
+                };
+                
+                video.src = URL.createObjectURL(file);
+            });
+        }
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadProgress.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressFill.textContent = '0%';
+
+            try {
+                const xhr = new XMLHttpRequest();
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = Math.round((e.loaded / e.total) * 100);
+                        progressFill.style.width = percentComplete + '%';
+                        progressFill.textContent = percentComplete + '%';
+                    }
+                });
+
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+                        showMessage(`✓ Successfully uploaded: ${response.filename}`, 'success');
+                    } else {
+                        const error = JSON.parse(xhr.responseText);
+                        showMessage(`✗ Error: ${error.error}`, 'error');
+                    }
+                    setTimeout(() => {
+                        uploadProgress.style.display = 'none';
+                    }, 1000);
+                });
+
+                xhr.addEventListener('error', () => {
+                    showMessage('✗ Upload failed. Please check your connection.', 'error');
+                    uploadProgress.style.display = 'none';
+                });
+
+                xhr.open('POST', '/upload');
+                xhr.send(formData);
+
+            } catch (error) {
+                showMessage(`✗ Error: ${error.message}`, 'error');
+                uploadProgress.style.display = 'none';
+            }
+        }
+
+        async function loadVideos() {
+            try {
+                const response = await fetch('/list');
+                const data = await response.json();
+
+                if (data.success && data.videos.length > 0) {
+                    videoListContent.innerHTML = data.videos.map(video => `
+                        <div class="video-item">
+                            <div class="video-info">
+                                <div class="video-name"> ${video.name}</div>
+                                <div class="video-size">${formatBytes(video.size)}</div>
+                            </div>
+                            <button class="delete-btn" onclick="deleteVideo('${video.name}')">Delete</button>
+                        </div>
+                    `).join('');
+                } else {
+                    videoListContent.innerHTML = '<div class="loading">No videos uploaded yet</div>';
+                }
+            } catch (error) {
+                videoListContent.innerHTML = '<div class="loading">Error loading videos</div>';
+            }
+        }
+
+        async function deleteVideo(filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(`✓ Deleted: ${filename}`, 'success');
+                    loadVideos();
+                } else {
+                    showMessage(`✗ Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`✗ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function showMessage(text, type) {
+            const message = document.createElement('div');
+            message.className = `message ${type}`;
+            message.textContent = text;
+            
+            const uploadArea = document.querySelector('.upload-area');
+            uploadArea.insertBefore(message, uploadArea.firstChild);
+
+            setTimeout(() => {
+                message.remove();
+            }, 5000);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // Load videos on page load
+        loadVideos();
+
+        // Refresh video list every 10 seconds
+        setInterval(loadVideos, 10000);
+    </script>
+</body>
+</html>
