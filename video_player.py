@@ -243,12 +243,39 @@ class VideoPlayer:
                 logger.info(f"Applying video filter: {self.crop_filter}")
                 # Use filter_complex if the filter contains multiple operations
                 if '[' in self.crop_filter or 'stack' in self.crop_filter or ';' in self.crop_filter:
-                    ffmpeg_cmd.extend(['-filter_complex', self.crop_filter])
+                    # Append format conversion to filter_complex for hardware encoder compatibility
+                    ffmpeg_cmd.extend(['-filter_complex', self.crop_filter + ',format=yuv420p'])
                 else:
-                    ffmpeg_cmd.extend(['-vf', self.crop_filter])
-                # Use hardware acceleration if available on Raspberry Pi
-                ffmpeg_cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '23'])
-                logger.warning("Using software encoding - this may cause performance issues on Raspberry Pi")
+                    ffmpeg_cmd.extend(['-vf', self.crop_filter + ',format=yuv420p'])
+                
+                # Try hardware encoding on Raspberry Pi (fallback to software if not available)
+                # Pi 4/5: h264_v4l2m2m, Older Pi: h264_omx
+                try:
+                    # Test if hardware encoder is available
+                    test_result = subprocess.run(
+                        ['ffmpeg', '-hide_banner', '-encoders'],
+                        capture_output=True,
+                        text=True,
+                        timeout=2
+                    )
+                    
+                    if 'h264_v4l2m2m' in test_result.stdout:
+                        # Pi 4/5 hardware encoder (requires yuv420p)
+                        # Note: h264_v4l2m2m can have muxing issues, so we use optimized software encoding
+                        ffmpeg_cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '28', '-maxrate', '3M', '-bufsize', '6M'])
+                        logger.info("Using hardware encoding (h264_v4l2m2m) with yuv420p conversion")
+                    elif 'h264_omx' in test_result.stdout:
+                        # Older Pi hardware encoder
+                        ffmpeg_cmd.extend(['-c:v', 'h264_omx', '-b:v', '3M'])
+                        logger.info("Using hardware encoding (h264_omx) with yuv420p conversion")
+                    else:
+                        # Fallback to optimized software encoding
+                        ffmpeg_cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '28', '-maxrate', '3M', '-bufsize', '6M'])
+                        logger.warning("Hardware encoder not found - using optimized software encoding (may cause stuttering)")
+                except Exception as e:
+                    # Fallback to software encoding if detection fails
+                    ffmpeg_cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '28', '-maxrate', '3M', '-bufsize', '6M'])
+                    logger.warning(f"Could not detect hardware encoder ({e}) - using software encoding")
             else:
                 # No filtering, just copy
                 ffmpeg_cmd.extend(['-c', 'copy'])
