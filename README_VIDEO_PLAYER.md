@@ -117,6 +117,43 @@ python3 video_player.py ~/videos --delay 1.5 --shuffle
 
 ## Troubleshooting
 
+### Videos Freezing During Playback
+
+**NEW**: Enhanced logging has been added to help diagnose freezing issues. See `TROUBLESHOOTING_VIDEO_FREEZING.md` for detailed information.
+
+**Quick diagnostic steps:**
+
+1. **Check the detailed logs:**
+```bash
+# Real-time monitoring
+tail -f /tmp/video_player.log
+
+# View recent errors
+grep -i "error\|warning" /tmp/video_player.log
+```
+
+2. **Analyze your videos:**
+```bash
+# Run the video analysis script
+bash analyze_videos.sh /home/pi/videos
+
+# Check the report
+cat /tmp/video_analysis.txt
+```
+
+3. **Common causes:**
+   - **H.265/HEVC codec**: Limited Pi hardware support
+   - **High bitrate**: Videos >10 Mbps may stutter
+   - **CPU overload**: Check temperature with `vcgencmd measure_temp`
+   - **Thermal throttling**: Ensure adequate cooling
+
+4. **Quick fix - Re-encode problematic videos:**
+```bash
+ffmpeg -i input.mp4 -c:v libx264 -crf 23 -maxrate 5M -bufsize 10M -c:a aac output.mp4
+```
+
+For comprehensive troubleshooting, see **TROUBLESHOOTING_VIDEO_FREEZING.md**
+
 ### Service Won't Start
 
 Check the logs:
