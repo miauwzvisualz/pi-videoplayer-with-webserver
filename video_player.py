@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Video Player with FFmpeg Loop
 Monitors a folder and plays all videos in a continuous loop using ffmpeg.
