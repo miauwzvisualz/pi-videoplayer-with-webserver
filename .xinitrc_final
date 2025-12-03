@@ -1,5 +1,0 @@
-#!/bin/bash
-# X11 initialization script for video player
-
-# Start video player without crop filter
-exec python3 /home/pi/video_player.py /home/pi/videos
