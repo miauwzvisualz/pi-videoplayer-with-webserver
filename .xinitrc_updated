@@ -1,0 +1,14 @@
+#!/bin/bash
+# X11 initialization script for video player
+# This runs when X server starts
+
+# Disable screen blanking and power saving (if xset is available)
+command -v xset >/dev/null 2>&1 && {
+    xset s off
+    xset -dpms
+    xset s noblank
+}
+
+# Start video player WITHOUT crop filter (videos are pre-processed on upload)
+# The upload server now processes videos with the crop/vstack filter
+exec /home/pi/start_video_player.sh

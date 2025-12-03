@@ -1,0 +1,5 @@
+#!/bin/bash
+# X11 initialization script for video player
+
+# Start video player (videos are pre-processed on upload)
+exec /home/pi/start_video_player.sh
