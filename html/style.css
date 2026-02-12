@@ -6,7 +6,7 @@
 
 body {
     font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #000000 0%, #78095c 50%, #000000 100%);
+    background: linear-gradient(90deg, #000000 0%, #c20994 50%, #000000 100%);
     min-height: 100vh;
     padding: 20px;
 }
@@ -19,27 +19,74 @@ body {
 .header {
     text-align: center;
     color: #000000;
-    filter: drop-shadow( 0 0 15px #ff00ff);
     margin-bottom: 30px;
 }
 
 .header h1 {
-    font-size: 3rem;
+    font-size: 4rem;
     margin-bottom: 10px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    text-shadow: 0px 4px 0px rgba(255,0,255,1);
 }
 
 .header p {
-    font-size: 1.1rem;
-    opacity: 0.9;
+    font-size: 1.5rem;
+    opacity: 1;
     color: #ff00ff;
+    filter:drop-shadow(0px 0px 4px rgba(0,0,0,1));
+}
+
+.mode-switcher {
+    display: flex;
+    gap: 0;
+    margin-bottom: 30px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 50px rgba(255,0,255,1);
+}
+
+.mode-btn {
+    flex: 1;
+    padding: 16px 30px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border: 2px solid #ff00ff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #111;
+    color: #ff00ff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.mode-btn:first-child {
+    border-radius: 12px 0 0 12px;
+    border-right: 1px solid #ff00ff;
+}
+
+.mode-btn:last-child {
+    border-radius: 0 12px 12px 0;
+    border-left: 1px solid #ff00ff;
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, #ff00ff 0%, #aa00aa 100%);
+    color: #fff;
+    box-shadow: 0 0 30px rgba(255,0,255,0.5);
+}
+
+.mode-btn:hover:not(.active) {
+    background: #330033;
+    box-shadow: 0 0 15px rgba(255,0,255,0.3);
 }
 
 .upload-area {
+    border-width:2px;
+    border-color:#ff00ff;
+    border-style:solid;
     background: #222222;
     border-radius: 15px;
     padding: 40px;
-    box-shadow: 0 0 30px rgba(255,0,255,0.5);
+    box-shadow: 0 0 50px rgba(255,0,255,1);
     margin-bottom: 30px;
 }
 
@@ -123,10 +170,13 @@ body {
 }
 
 .video-list {
+    border-width:2px;
+    border-color:#ff00ff;
+    border-style:solid;
     background: #222222;
     border-radius: 15px;
     padding: 30px;
-    box-shadow: 0 0 30px rgba(255,0,255,0.5);
+    box-shadow: 0 0 50px rgba(255,0,255,1);
 }
 
 .video-list h2 {
@@ -215,11 +265,14 @@ body {
 }
 
 .system-controls {
+    border-width:2px;
+    border-color:#ff00ff;
+    border-style:solid;
     background: #222222;
     border-radius: 16px;
     padding: 30px;
     margin-top: 40px; 
-    box-shadow: 0 0 30px rgba(255,0,255,0.5);
+    box-shadow: 0 0 50px rgba(255,0,255,1);
 }
 
 .system-controls h2 {
@@ -277,12 +330,15 @@ body {
 }
 
 .credits            {
-    background: rgba(255,0,255,0.2);
+    background: rgba(0,0,0,0.3);
     border-radius: 16px;
     padding: 30px;
     margin-top: 40px; 
     text-align:center;
-    color:#ee00ee;
+    color:#ff00ff;
+    border-width:2px;
+    border-color:#ff00ff;
+    border-style:solid;
  /*    box-shadow: 0 0 30px rgba(255,0,255,0.5); */
 }
 

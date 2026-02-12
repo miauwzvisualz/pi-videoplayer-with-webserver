@@ -15,10 +15,15 @@ import logging
 # Configuration
 UPLOAD_FOLDER = Path('/home/pi/videos/uploads')  # Raw uploaded videos
 PROCESSED_FOLDER = Path('/home/pi/videos')  # Processed videos for playback
+AUDIO_FOLDER = Path('/home/pi/audio')  # Audio files for playback
 ALLOWED_EXTENSIONS = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg'}
+ALLOWED_AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma', '.opus', '.aiff', '.alac'}
 MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
 REQUIRED_WIDTH = 3072
 REQUIRED_HEIGHT = 64
+
+# Mode state file
+MODE_FILE = Path('/home/pi/.player_mode')  # Stores 'video' or 'audio'
 
 # Video filter for LED strip layout
 VIDEO_FILTER = '[0:v]crop=1792:64:0:0[top];[0:v]crop=1280:64:1792:0,pad=1792:64:0:0[bottom];[top][bottom]vstack'
@@ -41,11 +46,42 @@ logger = logging.getLogger(__name__)
 # Ensure folders exist
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 PROCESSED_FOLDER.mkdir(parents=True, exist_ok=True)
+AUDIO_FOLDER.mkdir(parents=True, exist_ok=True)
+
+
+def get_current_mode():
+    """Get the current player mode from the mode file."""
+    try:
+        if MODE_FILE.exists():
+            mode = MODE_FILE.read_text().strip()
+            if mode in ('video', 'audio'):
+                return mode
+    except Exception as e:
+        logger.error(f"Error reading mode file: {e}")
+    return 'video'  # Default mode
+
+
+def set_current_mode(mode):
+    """Set the current player mode and write to mode file."""
+    if mode not in ('video', 'audio'):
+        return False
+    try:
+        MODE_FILE.write_text(mode)
+        logger.info(f"Mode set to: {mode}")
+        return True
+    except Exception as e:
+        logger.error(f"Error writing mode file: {e}")
+        return False
 
 
 def allowed_file(filename):
     """Check if file extension is allowed."""
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
+
+
+def allowed_audio_file(filename):
+    """Check if audio file extension is allowed."""
+    return Path(filename).suffix.lower() in ALLOWED_AUDIO_EXTENSIONS
 
 
 def check_video_resolution(filepath):
@@ -149,6 +185,57 @@ def restart_video_player():
             return False
     except Exception as e:
         logger.error(f"Error restarting video player: {e}")
+        return False
+
+
+def restart_audio_player():
+    """Restart the audio player service to reload the playlist."""
+    try:
+        result = subprocess.run(
+            ['sudo', 'systemctl', 'restart', 'audio-player.service'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            logger.info("Audio player service restarted successfully")
+            return True
+        else:
+            logger.error(f"Failed to restart audio player: {result.stderr}")
+            return False
+    except Exception as e:
+        logger.error(f"Error restarting audio player: {e}")
+        return False
+
+
+def switch_mode(new_mode):
+    """Switch between video and audio player modes."""
+    current_mode = get_current_mode()
+    if new_mode == current_mode:
+        logger.info(f"Already in {new_mode} mode")
+        return True
+    
+    if not set_current_mode(new_mode):
+        return False
+    
+    try:
+        if new_mode == 'audio':
+            # Stop video player, start audio player
+            subprocess.run(['sudo', 'systemctl', 'stop', 'video-player-x11.service'],
+                         capture_output=True, text=True, timeout=5)
+            subprocess.run(['sudo', 'systemctl', 'start', 'audio-player.service'],
+                         capture_output=True, text=True, timeout=5)
+            logger.info("Switched to audio player mode")
+        else:
+            # Stop audio player, start video player
+            subprocess.run(['sudo', 'systemctl', 'stop', 'audio-player.service'],
+                         capture_output=True, text=True, timeout=5)
+            subprocess.run(['sudo', 'systemctl', 'start', 'video-player-x11.service'],
+                         capture_output=True, text=True, timeout=5)
+            logger.info("Switched to video player mode")
+        return True
+    except Exception as e:
+        logger.error(f"Error switching mode: {e}")
         return False
 
 
@@ -330,6 +417,128 @@ def delete_video(filename):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/mode', methods=['GET'])
+def get_mode():
+    """Get the current player mode."""
+    return jsonify({'success': True, 'mode': get_current_mode()})
+
+
+@app.route('/mode', methods=['POST'])
+def set_mode():
+    """Switch between video and audio player modes."""
+    try:
+        data = request.get_json()
+        new_mode = data.get('mode', '').strip().lower()
+        
+        if new_mode not in ('video', 'audio'):
+            return jsonify({'success': False, 'error': 'Invalid mode. Use "video" or "audio".'}), 400
+        
+        if switch_mode(new_mode):
+            return jsonify({'success': True, 'mode': new_mode, 'message': f'Switched to {new_mode} player mode'})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to switch mode'}), 500
+    except Exception as e:
+        logger.error(f"Mode switch error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/audio/upload', methods=['POST'])
+def upload_audio():
+    """Handle audio file upload."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if not allowed_audio_file(file.filename):
+            return jsonify({
+                'success': False,
+                'error': f'File type not allowed. Allowed types: {", ".join(sorted(ALLOWED_AUDIO_EXTENSIONS))}'
+            }), 400
+        
+        filename = secure_filename(file.filename)
+        filepath = AUDIO_FOLDER / filename
+        
+        # Handle duplicate filenames
+        if filepath.exists():
+            base = filepath.stem
+            ext = filepath.suffix
+            counter = 1
+            while filepath.exists():
+                filename = f"{base}_{counter}{ext}"
+                filepath = AUDIO_FOLDER / filename
+                counter += 1
+        
+        file.save(str(filepath))
+        
+        logger.info(f"Uploaded audio: {filename} ({filepath.stat().st_size / 1024 / 1024:.2f} MB)")
+        
+        # Restart audio player if in audio mode
+        if get_current_mode() == 'audio':
+            restart_audio_player()
+        
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'size': filepath.stat().st_size
+        })
+        
+    except Exception as e:
+        logger.error(f"Audio upload error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/audio/list', methods=['GET'])
+def list_audio():
+    """List all audio files in the audio folder."""
+    try:
+        audio_files = []
+        for file_path in sorted(AUDIO_FOLDER.iterdir()):
+            if file_path.is_file() and file_path.suffix.lower() in ALLOWED_AUDIO_EXTENSIONS:
+                audio_files.append({
+                    'name': file_path.name,
+                    'size': file_path.stat().st_size,
+                    'modified': file_path.stat().st_mtime
+                })
+        
+        return jsonify({'success': True, 'audio_files': audio_files})
+        
+    except Exception as e:
+        logger.error(f"Audio list error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/audio/delete/<filename>', methods=['DELETE'])
+def delete_audio(filename):
+    """Delete an audio file."""
+    try:
+        filename = secure_filename(filename)
+        filepath = AUDIO_FOLDER / filename
+        
+        if not filepath.exists():
+            return jsonify({'success': False, 'error': 'File not found'}), 404
+        
+        if not allowed_audio_file(filename):
+            return jsonify({'success': False, 'error': 'Invalid file type'}), 400
+        
+        filepath.unlink()
+        logger.info(f"Deleted audio file: {filename}")
+        
+        # Restart audio player if in audio mode
+        if get_current_mode() == 'audio':
+            restart_audio_player()
+        
+        return jsonify({'success': True, 'message': f'Deleted {filename}'})
+        
+    except Exception as e:
+        logger.error(f"Audio delete error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/system/restart', methods=['POST'])
 def system_restart():
     """Restart the Raspberry Pi."""
@@ -354,12 +563,15 @@ def system_shutdown():
 
 if __name__ == '__main__':
     logger.info("=" * 60)
-    logger.info("Video Upload Server with Pre-Processing")
+    logger.info("Video/Audio Upload Server")
     logger.info("=" * 60)
     logger.info(f"Upload folder (raw): {UPLOAD_FOLDER}")
     logger.info(f"Processed folder (playback): {PROCESSED_FOLDER}")
+    logger.info(f"Audio folder: {AUDIO_FOLDER}")
+    logger.info(f"Current mode: {get_current_mode()}")
     logger.info(f"Video filter: {VIDEO_FILTER}")
-    logger.info(f"Allowed formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+    logger.info(f"Allowed video formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+    logger.info(f"Allowed audio formats: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}")
     logger.info(f"Max file size: {MAX_FILE_SIZE / 1024 / 1024 / 1024:.1f} GB")
     logger.info(f"Required resolution: {REQUIRED_WIDTH}x{REQUIRED_HEIGHT}")
     logger.info("-" * 60)

@@ -1,0 +1,17 @@
+[Unit]
+Description=Audio Player - Loops audio files from /home/pi/audio
+After=sound.target
+Wants=sound.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi
+ExecStart=/usr/bin/python3 /home/pi/audio_player.py /home/pi/audio
+Restart=always
+RestartSec=5
+Environment=HOME=/home/pi
+
+[Install]
+WantedBy=multi-user.target

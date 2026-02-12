@@ -3,43 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Upload - Raspberry Pi</title>
+    <title>RASPI PLAYER 3000</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>VIDEO UPLOAD 3000</h1>
-            <p>Drag and drop videos to upload to the fucking waaaaave</p>
+            <h1>RASPI PLAYER 3000</h1>
+            <p id="header-subtitle">Drag and drop videos or audio for uplooooooad</p>
         </div>
 
-        <div class="upload-area">
-            <div class="drop-zone" id="drop-zone">
-                <h2>Drop videos here</h2>
-                <p>or</p>
-                <button class="browse-btn" onclick="document.getElementById('file-input').click()">
-                    Browse Files
-                </button>
-                <input type="file" id="file-input" accept="video/*" multiple>
-                <p style="margin-top: 20px; font-size: 0.9rem; color: #999;">
-                    Supported formats: MP4, AVI, MKV, MOV, WMV, FLV, WebM, M4V, MPG, MPEG
-                </p>
-                <p style="margin-top: 20px; font-size: 0.9rem; color: #999;">
-                    Supported resolution: 3072x64 pixel
-                </p>
+        <!-- Mode Switcher -->
+        <div class="mode-switcher">
+            <button class="mode-btn active" id="mode-video-btn" onclick="switchMode('video')">
+                Video Player
+            </button>
+            <button class="mode-btn" id="mode-audio-btn" onclick="switchMode('audio')">
+                Audio Player
+            </button>
+        </div>
+
+        <!-- Video Mode Section -->
+        <div id="video-section">
+            <div class="upload-area">
+                <div class="drop-zone" id="drop-zone">
+                    <h2>Drop videos here</h2>
+                    <p>or</p>
+                    <button class="browse-btn" onclick="document.getElementById('file-input').click()">
+                        Browse Files
+                    </button>
+                    <input type="file" id="file-input" accept="video/*" multiple>
+                    <p style="margin-top: 20px; font-size: 0.9rem; color: #999;">
+                        Supported formats: MP4, AVI, MKV, MOV, WMV, FLV, WebM, M4V, MPG, MPEG
+                    </p>
+                    <p style="margin-top: 20px; font-size: 0.9rem; color: #999;">
+                        Supported resolution: 3072x64 pixel
+                    </p>
+                </div>
+
+                <div class="upload-progress" id="upload-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill">0%</div>
+                    </div>
+                </div>
             </div>
 
-            <div class="upload-progress" id="upload-progress">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill">0%</div>
+            <div class="video-list">
+                <h2>Videos on Raspberry Pi</h2>
+                <div id="video-list-content">
+                    <div class="loading">Loading videos...</div>
                 </div>
             </div>
         </div>
 
-        <div class="video-list">
-            <h2>Videos on Raspberry Pi</h2>
-            <div id="video-list-content">
-                <div class="loading">Loading videos...</div>
+        <!-- Audio Mode Section -->
+        <div id="audio-section" style="display: none;">
+            <div class="upload-area">
+                <div class="drop-zone" id="audio-drop-zone">
+                    <h2>Drop audio files here</h2>
+                    <p>or</p>
+                    <button class="browse-btn" onclick="document.getElementById('audio-file-input').click()">
+                        Browse Files
+                    </button>
+                    <input type="file" id="audio-file-input" accept="audio/*" multiple>
+                    <p style="margin-top: 20px; font-size: 0.9rem; color: #999;">
+                        Supported formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA, OPUS, AIFF, ALAC
+                    </p>
+                </div>
+
+                <div class="upload-progress" id="audio-upload-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="audio-progress-fill">0%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="video-list">
+                <h2>Audio Files on Raspberry Pi</h2>
+                <div id="audio-list-content">
+                    <div class="loading">Loading audio files...</div>
+                </div>
             </div>
         </div>
 
@@ -54,20 +97,93 @@
                 </button>
             </div>
         </div>
-        <div class="credits"><a href="https://www.pascalp.ch"><img src="camcat_BW.svg" width="150px" alt="miauwz logo"></a>VIDEO UPLOAD 3000 made by Pascal Pendl / miawz.visualz</div>
+        <div class="credits"><a href="https://www.pascalp.ch"><img src="camcat_BW.svg" width="150px" alt="miauwz logo"></a>RASPI PLAYER 3000 made by Pascal Pendl / miawz.visualz</div>
     </div>
    
 
     <script>
+        // Current mode
+        let currentMode = 'video';
+
+        // Video elements
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
         const uploadProgress = document.getElementById('upload-progress');
         const progressFill = document.getElementById('progress-fill');
         const videoListContent = document.getElementById('video-list-content');
 
+        // Audio elements
+        const audioDropZone = document.getElementById('audio-drop-zone');
+        const audioFileInput = document.getElementById('audio-file-input');
+        const audioUploadProgress = document.getElementById('audio-upload-progress');
+        const audioProgressFill = document.getElementById('audio-progress-fill');
+        const audioListContent = document.getElementById('audio-list-content');
+
+        // Mode elements
+        const videoSection = document.getElementById('video-section');
+        const audioSection = document.getElementById('audio-section');
+        const modeVideoBtn = document.getElementById('mode-video-btn');
+        const modeAudioBtn = document.getElementById('mode-audio-btn');
+        const headerSubtitle = document.getElementById('header-subtitle');
+
+        // ==================== MODE SWITCHING ====================
+
+        async function switchMode(mode) {
+            try {
+                const response = await fetch('/mode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: mode })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    currentMode = mode;
+                    updateModeUI();
+                    showMessage(`Switched to ${mode} player mode`, 'success');
+                } else {
+                    showMessage(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error switching mode: ${error.message}`, 'error');
+            }
+        }
+
+        function updateModeUI() {
+            if (currentMode === 'video') {
+                videoSection.style.display = 'block';
+                audioSection.style.display = 'none';
+                modeVideoBtn.classList.add('active');
+                modeAudioBtn.classList.remove('active');
+                headerSubtitle.textContent = 'Drag and drop videos to upload to the fucking waaaaave';
+            } else {
+                videoSection.style.display = 'none';
+                audioSection.style.display = 'block';
+                modeVideoBtn.classList.remove('active');
+                modeAudioBtn.classList.add('active');
+                headerSubtitle.textContent = 'Drag and drop audio files for looped playback';
+            }
+        }
+
+        async function loadCurrentMode() {
+            try {
+                const response = await fetch('/mode');
+                const data = await response.json();
+                if (data.success) {
+                    currentMode = data.mode;
+                    updateModeUI();
+                }
+            } catch (error) {
+                console.error('Error loading mode:', error);
+            }
+        }
+
+        // ==================== VIDEO DRAG & DROP ====================
+
         // Prevent default drag behaviors
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, preventDefaults, false);
+            audioDropZone.addEventListener(eventName, preventDefaults, false);
             document.body.addEventListener(eventName, preventDefaults, false);
         });
 
@@ -81,32 +197,51 @@
             dropZone.addEventListener(eventName, () => {
                 dropZone.classList.add('drag-over');
             }, false);
+            audioDropZone.addEventListener(eventName, () => {
+                audioDropZone.classList.add('drag-over');
+            }, false);
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, () => {
                 dropZone.classList.remove('drag-over');
             }, false);
+            audioDropZone.addEventListener(eventName, () => {
+                audioDropZone.classList.remove('drag-over');
+            }, false);
         });
 
-        // Handle dropped files
+        // Handle dropped video files
         dropZone.addEventListener('drop', (e) => {
             const files = e.dataTransfer.files;
-            handleFiles(files);
+            handleVideoFiles(files);
         }, false);
 
-        // Handle file input change
+        // Handle file input change (video)
         fileInput.addEventListener('change', (e) => {
             const files = e.target.files;
-            handleFiles(files);
+            handleVideoFiles(files);
         });
 
-        async function handleFiles(files) {
+        // Handle dropped audio files
+        audioDropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            handleAudioFiles(files);
+        }, false);
+
+        // Handle file input change (audio)
+        audioFileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            handleAudioFiles(files);
+        });
+
+        // ==================== VIDEO UPLOAD ====================
+
+        async function handleVideoFiles(files) {
             for (let file of files) {
-                // Validate resolution before uploading
                 const isValid = await validateVideoResolution(file);
                 if (isValid) {
-                    await uploadFile(file);
+                    await uploadVideoFile(file);
                 }
             }
             loadVideos();
@@ -125,13 +260,13 @@
                     if (width === 3072 && height === 64) {
                         resolve(true);
                     } else {
-                        showMessage(`✗ Invalid resolution for "${file.name}": ${width}x${height}. Required: 3072x64 pixels.`, 'error');
+                        showMessage(`Invalid resolution for "${file.name}": ${width}x${height}. Required: 3072x64 pixels.`, 'error');
                         resolve(false);
                     }
                 };
                 
                 video.onerror = function() {
-                    showMessage(`✗ Error reading video file: ${file.name}`, 'error');
+                    showMessage(`Error reading video file: ${file.name}`, 'error');
                     resolve(false);
                 };
                 
@@ -139,7 +274,7 @@
             });
         }
 
-        async function uploadFile(file) {
+        async function uploadVideoFile(file) {
             const formData = new FormData();
             formData.append('file', file);
 
@@ -172,7 +307,7 @@
                 });
 
                 xhr.addEventListener('error', () => {
-                    showMessage('✗ Upload failed. Please check your connection.', 'error');
+                    showMessage('Upload failed. Please check your connection.', 'error');
                     uploadProgress.style.display = 'none';
                 });
 
@@ -180,10 +315,68 @@
                 xhr.send(formData);
 
             } catch (error) {
-                showMessage(`✗ Error: ${error.message}`, 'error');
+                showMessage(`Error: ${error.message}`, 'error');
                 uploadProgress.style.display = 'none';
             }
         }
+
+        // ==================== AUDIO UPLOAD ====================
+
+        async function handleAudioFiles(files) {
+            for (let file of files) {
+                await uploadAudioFile(file);
+            }
+            loadAudioFiles();
+        }
+
+        async function uploadAudioFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            audioUploadProgress.style.display = 'block';
+            audioProgressFill.style.width = '0%';
+            audioProgressFill.textContent = '0%';
+
+            try {
+                const xhr = new XMLHttpRequest();
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = Math.round((e.loaded / e.total) * 100);
+                        audioProgressFill.style.width = percentComplete + '%';
+                        audioProgressFill.textContent = percentComplete + '%';
+                    }
+                });
+
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+                        showMessage(`Successfully uploaded: ${response.filename}`, 'success');
+                        loadAudioFiles();
+                    } else {
+                        const error = JSON.parse(xhr.responseText);
+                        showMessage(`Error: ${error.error}`, 'error');
+                    }
+                    setTimeout(() => {
+                        audioUploadProgress.style.display = 'none';
+                    }, 1000);
+                });
+
+                xhr.addEventListener('error', () => {
+                    showMessage('Upload failed. Please check your connection.', 'error');
+                    audioUploadProgress.style.display = 'none';
+                });
+
+                xhr.open('POST', '/audio/upload');
+                xhr.send(formData);
+
+            } catch (error) {
+                showMessage(`Error: ${error.message}`, 'error');
+                audioUploadProgress.style.display = 'none';
+            }
+        }
+
+        // ==================== FILE LISTS ====================
 
         async function loadVideos() {
             try {
@@ -208,6 +401,31 @@
             }
         }
 
+        async function loadAudioFiles() {
+            try {
+                const response = await fetch('/audio/list');
+                const data = await response.json();
+
+                if (data.success && data.audio_files.length > 0) {
+                    audioListContent.innerHTML = data.audio_files.map(audio => `
+                        <div class="video-item">
+                            <div class="video-info">
+                                <div class="video-name">${audio.name}</div>
+                                <div class="video-size">${formatBytes(audio.size)}</div>
+                            </div>
+                            <button class="delete-btn" onclick="deleteAudio('${audio.name}')">Delete</button>
+                        </div>
+                    `).join('');
+                } else {
+                    audioListContent.innerHTML = '<div class="loading">No audio files uploaded yet</div>';
+                }
+            } catch (error) {
+                audioListContent.innerHTML = '<div class="loading">Error loading audio files</div>';
+            }
+        }
+
+        // ==================== DELETE ====================
+
         async function deleteVideo(filename) {
             if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
                 return;
@@ -221,22 +439,49 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showMessage(`✓ Deleted: ${filename}`, 'success');
+                    showMessage(`Deleted: ${filename}`, 'success');
                     loadVideos();
                 } else {
-                    showMessage(`✗ Error: ${data.error}`, 'error');
+                    showMessage(`Error: ${data.error}`, 'error');
                 }
             } catch (error) {
-                showMessage(`✗ Error: ${error.message}`, 'error');
+                showMessage(`Error: ${error.message}`, 'error');
             }
         }
+
+        async function deleteAudio(filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/audio/delete/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(`Deleted: ${filename}`, 'success');
+                    loadAudioFiles();
+                } else {
+                    showMessage(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // ==================== UTILITIES ====================
 
         function showMessage(text, type) {
             const message = document.createElement('div');
             message.className = `message ${type}`;
             message.textContent = text;
             
-            const uploadArea = document.querySelector('.upload-area');
+            // Insert message in the currently visible section's upload area
+            const section = currentMode === 'video' ? videoSection : audioSection;
+            const uploadArea = section.querySelector('.upload-area');
             uploadArea.insertBefore(message, uploadArea.firstChild);
 
             setTimeout(() => {
@@ -252,6 +497,8 @@
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         }
 
+        // ==================== SYSTEM CONTROLS ====================
+
         async function restartSystem() {
             if (!confirm('Are you sure you want to RESTART the Raspberry Pi?\n\nThis will reboot the system immediately.')) {
                 return;
@@ -265,7 +512,7 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showMessage('🔄 System restarting...', 'success');
+                    showMessage('System restarting...', 'success');
                     setTimeout(() => {
                         showMessage('System will be back online in ~30 seconds', 'success');
                     }, 2000);
@@ -290,7 +537,7 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showMessage('⏻ System shutting down...', 'success');
+                    showMessage('System shutting down...', 'success');
                     setTimeout(() => {
                         showMessage('System powered off. Unplug to fully shutdown.', 'success');
                     }, 2000);
@@ -302,11 +549,21 @@
             }
         }
 
-        // Load videos on page load
-        loadVideos();
+        // ==================== INIT ====================
 
-        // Refresh video list every 10 seconds
-        setInterval(loadVideos, 10000);
+        // Load current mode and file lists on page load
+        loadCurrentMode();
+        loadVideos();
+        loadAudioFiles();
+
+        // Refresh file lists every 10 seconds
+        setInterval(() => {
+            if (currentMode === 'video') {
+                loadVideos();
+            } else {
+                loadAudioFiles();
+            }
+        }, 10000);
     </script>
 </body>
 </html>
