@@ -4,7 +4,7 @@ Video Upload Web Server
 Simple Flask server for uploading videos via drag-and-drop interface.
 """
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, Response
 import os
 import subprocess
 import json
@@ -21,6 +21,12 @@ ALLOWED_AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.w
 MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
 REQUIRED_WIDTH = 3072
 REQUIRED_HEIGHT = 64
+
+# Captive portal configuration
+# Use a fake public IP — Android ignores captive portal redirects to private IPs.
+# nftables DNAT redirects traffic for this IP back to the Pi.
+CAPTIVE_PORTAL_IP = '4.3.2.1'
+CAPTIVE_PORTAL_URL = f'http://{CAPTIVE_PORTAL_IP}'
 
 # Mode state file
 MODE_FILE = Path('/home/pi/.player_mode')  # Stores 'video' or 'audio'
@@ -259,6 +265,56 @@ def shutdown_system():
     except Exception as e:
         logger.error(f"Error shutting down system: {e}")
         return False
+
+
+# --- Captive Portal Detection Routes ---
+# These endpoints respond to OS-specific connectivity checks.
+# By returning redirects instead of expected responses, the OS
+# will show a "Sign in to network" popup pointing to our UI.
+
+@app.route('/hotspot-detect.html')
+@app.route('/library/test/success.html')
+def captive_apple():
+    """Apple captive portal detection (iOS/macOS)."""
+    return redirect(CAPTIVE_PORTAL_URL, code=302)
+
+
+@app.route('/generate_204')
+@app.route('/gen_204')
+def captive_android():
+    """Android/Chrome captive portal detection."""
+    return redirect(CAPTIVE_PORTAL_URL, code=302)
+
+
+@app.route('/connecttest.txt')
+def captive_windows():
+    """Windows captive portal detection."""
+    return redirect(CAPTIVE_PORTAL_URL, code=302)
+
+
+@app.route('/redirect')
+def captive_windows_redirect():
+    """Windows captive portal redirect endpoint."""
+    return redirect(CAPTIVE_PORTAL_URL, code=302)
+
+
+@app.route('/ncsi.txt')
+def captive_windows_ncsi():
+    """Windows NCSI (Network Connectivity Status Indicator)."""
+    return redirect(CAPTIVE_PORTAL_URL, code=302)
+
+
+@app.route('/check_network_status.txt')
+@app.route('/connectivity-check.html')
+def captive_linux():
+    """Linux/Firefox captive portal detection."""
+    return redirect(CAPTIVE_PORTAL_URL, code=302)
+
+
+@app.route('/canonical.html')
+def captive_ubuntu():
+    """Ubuntu captive portal detection."""
+    return redirect(CAPTIVE_PORTAL_URL, code=302)
 
 
 @app.route('/')
@@ -561,6 +617,27 @@ def system_shutdown():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def ensure_correct_player_running():
+    """On startup, make sure the correct player service is running based on saved mode."""
+    mode = get_current_mode()
+    logger.info(f"Ensuring correct player is running for mode: {mode}")
+    try:
+        if mode == 'audio':
+            subprocess.run(['sudo', 'systemctl', 'stop', 'video-player-x11.service'],
+                         capture_output=True, text=True, timeout=5)
+            subprocess.run(['sudo', 'systemctl', 'start', 'audio-player.service'],
+                         capture_output=True, text=True, timeout=5)
+            logger.info("Started audio player service (boot)")
+        else:
+            subprocess.run(['sudo', 'systemctl', 'stop', 'audio-player.service'],
+                         capture_output=True, text=True, timeout=5)
+            subprocess.run(['sudo', 'systemctl', 'start', 'video-player-x11.service'],
+                         capture_output=True, text=True, timeout=5)
+            logger.info("Started video player service (boot)")
+    except Exception as e:
+        logger.error(f"Error ensuring correct player on startup: {e}")
+
+
 if __name__ == '__main__':
     logger.info("=" * 60)
     logger.info("Video/Audio Upload Server")
@@ -580,5 +657,8 @@ if __name__ == '__main__':
     logger.info("  http://<raspberry-pi-ip>:5000")
     logger.info(f"Logs: /tmp/video_upload_server.log")
     logger.info("=" * 60)
+    
+    # Start the correct player based on saved mode
+    ensure_correct_player_running()
     
     app.run(host='0.0.0.0', port=5000, debug=False)

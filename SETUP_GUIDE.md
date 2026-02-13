@@ -428,3 +428,334 @@ MP4, AVI, MKV, MOV, WMV, FLV, WebM, M4V, MPG, MPEG
 MP3, WAV, FLAC, OGG, M4A, AAC, WMA, OPUS, AIFF, ALAC
 
 No resolution/format restrictions — any audio file is accepted and played directly.
+
+---
+
+## 14. Setting Up a Wi-Fi Access Point
+
+If you want to connect to the Pi directly (e.g. at an installation without existing Wi-Fi), you can turn it into its own Access Point.
+
+> **Which method to use?**
+> - **Bookworm / Trixie** (2023+): Use **Method A** — NetworkManager handles everything.
+> - **Bullseye or older**: Use **Method B** — the classic hostapd + dnsmasq approach.
+>
+> Check your version with: `cat /etc/os-release`
+
+---
+
+### Method A: NetworkManager (Bookworm / Trixie)
+
+This is a single command. NetworkManager handles the AP, DHCP, and IP assignment — no extra packages needed.
+
+#### A1. Create the Access Point
+
+```bash
+sudo nmcli connection add \
+  con-name ap0 \
+  type wifi \
+  ifname wlan0 \
+  ssid PiPlayer \
+  802-11-wireless.mode ap \
+  802-11-wireless.band bg \
+  wifi-sec.key-mgmt wpa-psk \
+  wifi-sec.psk "YourPasswordHere" \
+  wifi-sec.pairwise ccmp \
+  wifi-sec.proto rsn \
+  ipv4.method shared \
+  ipv4.address 192.168.4.1/24 \
+  autoconnect yes
+```
+
+> Change `PiPlayer` and `YourPasswordHere` to your liking. The password must be at least 8 characters.
+
+#### A2. Activate the Access Point
+
+```bash
+sudo nmcli connection up ap0
+```
+
+That's it. The AP is now active and will auto-start on boot.
+
+#### A3. Connect and Use
+
+Connect to the **PiPlayer** Wi-Fi network, then open:
+
+```
+http://192.168.4.1:5000
+```
+
+#### A4. Managing the Access Point
+
+```bash
+# Check AP status
+nmcli connection show ap0
+
+# Stop the AP
+sudo nmcli connection down ap0
+
+# Start the AP
+sudo nmcli connection up ap0
+
+# Remove the AP entirely
+sudo nmcli connection delete ap0
+
+# Change the password
+sudo nmcli connection modify ap0 wifi-sec.psk "NewPassword"
+
+# Change the SSID
+sudo nmcli connection modify ap0 ssid "NewName"
+```
+
+#### A5. Troubleshooting (NetworkManager)
+
+```bash
+# Check if wlan0 has the static IP
+ip addr show wlan0
+
+# Check NetworkManager logs
+sudo journalctl -u NetworkManager -f
+
+# List all connections
+nmcli connection show
+
+# Check Wi-Fi device state
+nmcli device status
+```
+
+---
+
+### Method B: hostapd + dnsmasq (Bullseye and older)
+
+For older Raspberry Pi OS versions that use `dhcpcd` instead of NetworkManager.
+
+#### B1. Install Required Packages
+
+```bash
+sudo apt install -y hostapd dnsmasq
+```
+
+Stop both services while configuring:
+
+```bash
+sudo systemctl stop hostapd
+sudo systemctl stop dnsmasq
+```
+
+#### B2. Configure a Static IP for the Wireless Interface
+
+```bash
+sudo nano /etc/dhcpcd.conf
+```
+
+Add at the bottom:
+
+```
+interface wlan0
+    static ip_address=192.168.4.1/24
+    nohook wpa_supplicant
+```
+
+#### B3. Configure the DHCP Server (dnsmasq)
+
+Back up the original config and create a new one:
+
+```bash
+sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
+sudo nano /etc/dnsmasq.conf
+```
+
+Paste:
+
+```
+interface=wlan0
+dhcp-range=192.168.4.2,192.168.4.50,255.255.255.0,24h
+```
+
+This hands out IPs in the `192.168.4.2–50` range to connected clients.
+
+#### B4. Configure the Access Point (hostapd)
+
+```bash
+sudo nano /etc/hostapd/hostapd.conf
+```
+
+Paste (adjust `ssid` and `wpa_passphrase` to your liking):
+
+```
+interface=wlan0
+driver=nl80211
+ssid=PiPlayer
+hw_mode=g
+channel=7
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=YourPasswordHere
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+```
+
+> Change `ssid` and `wpa_passphrase` to whatever you want. The password must be at least 8 characters.
+
+Now tell hostapd where to find this config:
+
+```bash
+sudo nano /etc/default/hostapd
+```
+
+Find the line `#DAEMON_CONF=""` and replace it with:
+
+```
+DAEMON_CONF="/etc/hostapd/hostapd.conf"
+```
+
+#### B5. Enable and Start the Services
+
+```bash
+sudo systemctl unmask hostapd
+sudo systemctl enable hostapd
+sudo systemctl enable dnsmasq
+
+sudo systemctl start hostapd
+sudo systemctl start dnsmasq
+```
+
+Reboot to make sure everything comes up cleanly:
+
+```bash
+sudo reboot
+```
+
+#### B6. Connect and Use
+
+After reboot, you should see a Wi-Fi network called **PiPlayer** (or whatever you set as `ssid`). Connect to it with the password you configured, then open:
+
+```
+http://192.168.4.1:5000
+```
+
+#### B7. Troubleshooting (hostapd)
+
+```bash
+# Check hostapd status
+sudo systemctl status hostapd
+
+# Check dnsmasq status
+sudo systemctl status dnsmasq
+
+# Check if wlan0 has the static IP
+ip addr show wlan0
+
+# View hostapd logs
+sudo journalctl -u hostapd -f
+
+# If hostapd fails, test config manually
+sudo hostapd -dd /etc/hostapd/hostapd.conf
+```
+
+#### B8. Captive Portal (Auto-Open Upload UI)
+
+When enabled, devices connecting to the PiPlayer AP will automatically get a **"Sign in to network"** popup that opens the upload UI — no need to manually type the IP address.
+
+**How it works:**
+1. **DNS hijacking** — dnsmasq resolves all domain names to `192.168.4.1`
+2. **Port redirect** — nftables redirects HTTP port 80 → Flask port 5000
+3. **Portal detection** — Flask responds to OS captive portal check URLs with a redirect to the upload UI
+
+**Automated setup:**
+
+```bash
+sudo bash setup_captive_portal.sh
+```
+
+**Manual setup (if you prefer):**
+
+**Step 1: Add DNS hijacking to dnsmasq**
+
+Add this line to `/etc/dnsmasq.conf`:
+
+```
+address=/#/192.168.4.1
+```
+
+This tells dnsmasq to resolve *every* domain name to the Pi's IP.
+
+**Step 2: Add port 80 → 5000 redirect**
+
+Create `/etc/nftables-captive-portal.conf`:
+
+```
+#!/usr/sbin/nft -f
+table ip captive_portal {
+    chain prerouting {
+        type nat hook prerouting priority dstnat; policy accept;
+        iifname "wlan0" tcp dport 80 redirect to :5000
+    }
+}
+```
+
+Apply it:
+
+```bash
+sudo nft -f /etc/nftables-captive-portal.conf
+```
+
+**Step 3: Make it persistent across reboots**
+
+Create `/etc/systemd/system/captive-portal.service`:
+
+```ini
+[Unit]
+Description=Captive Portal nftables rules
+After=network-pre.target
+Before=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /etc/nftables-captive-portal.conf
+ExecStop=/usr/sbin/nft delete table ip captive_portal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable captive-portal.service
+sudo systemctl restart dnsmasq
+```
+
+**Disabling the captive portal:**
+
+```bash
+sudo systemctl stop captive-portal
+sudo nft delete table ip captive_portal
+# Remove the "address=/#/192.168.4.1" line from /etc/dnsmasq.conf
+sudo systemctl restart dnsmasq
+```
+
+**Troubleshooting captive portal:**
+
+```bash
+# Check if DNS hijacking is working (should return 192.168.4.1)
+nslookup google.com 192.168.4.1
+
+# Check if nftables redirect is active
+sudo nft list table ip captive_portal
+
+# Check captive portal service
+sudo systemctl status captive-portal
+
+# Test manually from a connected device
+curl -v http://captive.apple.com/hotspot-detect.html
+```
+
+---
+
+> **Note**: When running as an AP, the Pi's `wlan0` is no longer connected to your home Wi-Fi. If you need internet access on the Pi (e.g. for updates), connect via Ethernet or temporarily disable the AP and reconnect to Wi-Fi.

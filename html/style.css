@@ -141,7 +141,8 @@ body {
     box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
 }
 
-#file-input {
+#file-input,
+#audio-file-input {
     display: none;
 }
 
