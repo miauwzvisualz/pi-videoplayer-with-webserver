@@ -109,6 +109,8 @@ class AudioPlayer:
                     'mpv',
                     '--no-video',
                     '--really-quiet',
+                    '--ao=alsa',
+                    '--audio-device=alsa/plughw:CARD=Headphones,DEV=0',
                     str(audio_path)
                 ]
             elif self.backend == 'vlc':
